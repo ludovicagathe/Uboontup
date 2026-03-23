@@ -18,7 +18,31 @@ documentation() {
 
 }
 
-ask_confirmation() {
+assert() { # Test function requiring 3 arguments: 1. a string describing the test; 2. the expected result string or number; 3. the actual outcome of a function or other output from $(). Prints expected and result on failure, clipping both to their first 20 characters.
+  local DESCRIPTION=$1
+  local EXPECTED=$2
+  local RESULT=$3
+  local CHAR_LIMIT=50
+  if [[ ${#} -ne 3 ]]; then
+    echo -e "\033[1;31mThe number of arguments provided to the assert function should be 3\033[0m" >&2
+    return 1
+  fi
+  if [[ "$RESULT" != $EXPECTED ]]; then
+    if [[ "${#RESULT}" -gt "$CHAR_LIMIT" ]]; then
+      RESULT="${RESULT:0:$CHAR_LIMIT} (...)"
+    fi
+    if [[ "${#EXPECTED}" -gt "$CHAR_LIMIT" ]]; then
+      EXPECTED="${EXPECTED:0:$CHAR_LIMIT} (...)"
+    fi
+    echo -e "\033[1;31mTEST: \033[0m${DESCRIPTION}: \033[1;31mFailed\033[0m"
+    echo -e "EXPECTED:\t${EXPECTED}"
+    echo -e "RESULT:\t\t${RESULT}"
+    return 0
+  fi
+  echo -e "\033[1;32mTEST: \033[0m${DESCRIPTION}: \033[1;32mPassed\033[0m"
+}
+
+ask_confirmation() { # Ask for user confirmation, no enter required
   if [[ -z "$1" ]]; then
     PROMPT="Confirm (y/n): ";
   else
@@ -33,16 +57,73 @@ ask_confirmation() {
   fi
 }
 
-compare_versions() {
+get_version_score() { # Parse the version string and calculate the score, with: major version x1000000, feature version x 1000, fixes x 1, allowing for up to vX.999.999
+  if [[ -z "$1" ]];then # Check for empty or no argument supplied
+    echo -e "${RED}Version arguments are missing. You need to provide a version string of form \"v0.0.0\"${NC}" >&2
+    echo "e"
+    return 1
+  fi
+  if [[ "${#@}" -gt 1 ]];then # Check for more than 1 argument supplied
+    echo -e "${RED}Too many version arguments provided. You need to provide only 1 version strings${NC}" >&2
+    echo "e"
+    return 1
+  fi
+  local VERS DIGITS OLDIFS SCORE
+  VERS="$1"
+  if [[ "${1:0:1}" == "v" ]]; then # Check for "v" prefix and ignore
+    VERS="${1:1:$(( ${#1}-1 ))}"
+  fi
+  OLDIFS=$IFS
+  IFS='.'
+  read -r -a DIGITS <<< $VERS
+  IFS=$OLDIFS
+  if [[ ! "${#DIGITS[@]}" -eq 3 ]];then
+    echo -e "${RED}You need to provide a version string of form \"v0.0.0\"${NC}" >&2
+    echo "e"
+    return 1
+  fi
+  SCORE=0 # Initialise and compute score
+  SCORE=$(( $SCORE + (( ${DIGITS[0]} * 1000000 )) + (( ${DIGITS[1]} * 1000 )) + (( ${DIGITS[2]} * 1 )) ))
+  echo "$SCORE"
+  return 0
+}
+
+compare_versions() { # Compare two version strings of form "vX.X.X" or "X.X.X" ("X" is a number), the first version argument being the current and base for comparison. Returns "e" if both versions are equal, "g" if first argument is a more recent version and "l" if it is an older version
+  local SCORE1 SCORE2
   if [[ -z "$1" || -z "$2" ]];then
-    echo -e "${RED}Invalid version arguments supplied${NC}"
-    exit 1
+    echo -e "${RED}Version arguments are missing. You need to provide 2 version strings${NC}"
+    return 1
   fi
   if [[ "$1" =~ ^[v]?[0-9]+\.[0-9]+\.[0-9]+[\-]?[\-\.0-9a-zA-Z]?+$  && "$2" =~ ^[v]?[0-9]+\.[0-9]+\.[0-9]+[\-]?[\-\.0-9a-zA-Z]?+$ ]]; then
-    echo "valid versions supplied"
+    SCORE1=$(get_version_score $1)
+    if [[ ! "$?" == 0 ]];then
+      echo -e "${RED}Version arguments are wrong. You need to provide 2 version strings of form \"vX.X.X\" or \"X.X.X\" (X is a number)${NC}"
+      return 1
+    fi
+    SCORE2=$(get_version_score $2)
+    if [[ ! "$?" == 0 ]];then
+      echo -e "${RED}Version arguments are wrong. You need to provide 2 version strings of form \"vX.X.X\" or \"X.X.X\" (X is a number)${NC}"
+      return 1
+    fi
+    echo $SCORE1
+    echo $SCORE2
+    if [[ "$SCORE1" -eq "$SCORE2" ]];then
+      echo "e"
+      return 0
+    fi
+
+    if [[ "$SCORE1" -gt "$SCORE2" ]];then
+      echo "g"
+      return 0
+    fi
+
+    if [[ "$SCORE1" -lt "$SCORE2" ]];then
+      echo "l"
+    fi
+
   else
     echo -e "${RED}Invalid version arguments supplied${NC}"
-    exit 1
+    return 1
   fi
 }
 
@@ -97,4 +178,6 @@ erase_line() {
 
 # documentation
 #enable_bash_customisations
-compare_versions "v1.0.0" "v1.0.0"
+#compare_versions "v1.1.1.0" "v10000.0.1"
+#get_version_score "2.0.1.0"
+assert "Some test" 2 "$(get_version_score '2.0.1.0')"
