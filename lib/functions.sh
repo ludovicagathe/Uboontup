@@ -61,7 +61,6 @@ check_base_dir() { # Check if pwd is correct directory
   
 }
 
-# FUNCTION DEFINITIONS
 # RETURN A TIMESTAMP - DATE STRING WITH TIME
 date_string() {
   echo $(date +%Y%m%d%H%M%S)
@@ -224,6 +223,3 @@ detect_version () {
   echo "Version: $VERSION"
   echo "Message: $MESSAGE"
 }
-
-
-cd $PREV_DIR

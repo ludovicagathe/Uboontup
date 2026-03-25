@@ -155,4 +155,4 @@ erase_line() {
 # documentation
 #enable_bash_customisations
 #compare_versions "v1.1.1.0" "v10000.0.1"
-source ./unit_tests/test_get_version_score.sh
+#source ./unit_tests/test_get_version_score.sh
