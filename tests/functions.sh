@@ -1,20 +1,14 @@
-#!/bin/bash
-# FONT COLORS
-RED='\033[1;31m' # Error
-YELLOW='\033[1;33m' # Warning
-CYAN='\033[0;36m' # In progress
-GREEN='\033[1;32m' # Success
-NC='\033[0m' # No color
-
-# VARIABLES
-USER_DIRS=("logs" "repos" "setup")
-USER_FILES=("/logs/init.log" "/logs/errors.log")
-BASE_DIR="$HOME"
-PREV_DIR="$(pwd)"
-ERRORS=()
-WARNINGS=()
+# Helper and library functions
 
 # FUNCTIONS
+define_font_colours() {
+  RED='\033[1;31m' # Error
+  YELLOW='\033[1;33m' # Warning
+  CYAN='\033[0;36m' # In progress
+  GREEN='\033[1;32m' # Success
+  NC='\033[0m' # No color
+}
+
 set_base_dir() { # Set base directory to either $HOME (production) or test_home (development)
   if [[ ! $(basename $PWD) == "uboontup" ]]; then
     BASE_DIR=$PWD/test_home;
