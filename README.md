@@ -38,16 +38,16 @@ This is a work in progress which is still basic in terms of features and at a ve
 
 ```bash
 # Clone the repository
-git clone https://github.com/ludovicagathe/uboontup.git
+git clone https://github.com/ludovicagathe/Uboontup.git
 
 # Navigate to the directory
-cd uboontup
+cd Uboontup
 
 # Make the setup script executable
-chmod +x init.sh
+chmod +x setup
 
 # Run the installer
-sudo ./init.sh
+sudo ./setup
 ```
 ---
 
