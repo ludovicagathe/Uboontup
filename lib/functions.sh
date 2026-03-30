@@ -184,18 +184,88 @@ check_and_create_file() {
 detect_version () {
   local VERSION
   local MESSAGE
-  if [[ "$1" =~ ^[v]?[0-9]+\.[0-9]+\.[0-9]+[\-]?[\-\.0-9a-zA-Z]?+$ ]]; then
+  if [[ "$1" =~ ^[v]?[0-9]+(\.[0-9]+){1,2}(\-[a-zA-Z0-9\.\-]+)?$ ]]; then
     VERSION="$1"
-    if [[ "${1:0:1}" != "v" ]]; then
-      VERSION="v""$VERSION"
+    if [[ "${1:0:1}" == "v" ]]; then
+      VERSION="${1:1:$(( $#1 - 1 ))}"
     fi
+    echo "Version: $VERSION"
   else
-
+    echo -e "${RED}Version could not be determined${NC}" >&2
     return 1
   fi
   if [[ ! -z $2 ]]; then
-    MESSAGE=$2
+    echo "Message: $2"
   fi
-  echo "Version: $VERSION"
-  echo "Message: $MESSAGE"
+}
+
+get_version_score() { # Parse the version string and calculate the score, with: major version x1000000, feature version x 1000, fixes x 1, allowing for up to vX.999.999. Ignores alpha, (-alpha), beta (-beta), release candidates (-rc) etc
+  if [[ -z "$ERROR_STRING" ]]; then
+    ERROR_STRING="Err"
+  fi
+  local VERSION DIGITS OLDIFS SCORE
+  if [[ -z "$1" ]];then # Check for empty or no argument supplied
+    echo -e "${RED}Version arguments are missing. You need to provide a version string of form \"v0.0.0\"${NC}" >&2
+    echo "$ERROR_STRING"
+    return 1
+  fi
+  if [[ "${#@}" -gt 1 ]];then # Check for more than 1 argument supplied
+    echo -e "${RED}Too many version arguments provided. You need to provide only 1 version strings${NC}" >&2
+    echo "$ERROR_STRING"
+    return 1
+  fi
+  VERSION="$(cut -d '-' -f 1 <<< $1)"
+  if [[ "$VERSION" =~ ^[v]?[0-9]+$ ]]; then
+    VERSION="$VERSION"".0.0"
+  fi
+  if [[ "$VERSION" =~ ^[v]?[0-9]+\.[0-9]+$ ]]; then
+    VERSION="$VERSION"".0"
+  fi
+  if [[ ! "$VERSION" =~ ^[v]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo -e "${RED}You need to provide a version string of form \"v0.0.0\"${NC}" >&2
+    echo "$ERROR_STRING"
+    return 1
+  fi
+  if [[ "${1:0:1}" == "v" ]]; then # Check for "v" prefix and ignore
+    VERSION="${1:1:$(( ${#1}-1 ))}"
+  fi
+  OLDIFS=$IFS
+  IFS='.'
+  read -r -a DIGITS <<< $VERSION
+  IFS=$OLDIFS
+  SCORE=0 # Initialise and compute score
+  SCORE=$(( $SCORE + (( ${DIGITS[0]} * 1000000 )) + (( ${DIGITS[1]} * 1000 )) + (( ${DIGITS[2]} * 1 )) ))
+  echo "$SCORE"
+  return 0
+}
+
+compare_versions() { # Compare two version strings of form "vX.X.X" or "X.X.X" ("X" is a number), the first version argument being the current and base for comparison. Returns "e" if both versions are equal, "g" if first argument is a greater or more recent version and "s" if it is smaller or an older version. Returns error string "Err" if arguments are not appropriate
+  if [[ -z "$ERROR_STRING" ]]; then
+    ERROR_STRING="Err"
+  fi
+  local SCORE1 SCORE2
+  if [[ -z "$1" || -z "$2" || ${#@} -gt 2 ]];then
+    echo -e "${RED}Version arguments are not adequate. You need to provide 2 version strings of form 'vX.X.X' or 'X.X.X'${NC}" >&2
+    echo "$ERROR_STRING"
+    return 1
+  fi
+  SCORE1=$(get_version_score $1)
+  SCORE2=$(get_version_score $2)
+  if [[ "$SCORE1" == "$ERROR_STRING" || "$SCORE2" == "$ERROR_STRING" ]]; then
+    echo -e "${RED}Invalid version arguments supplied${NC}" >&2
+    echo "$ERROR_STRING"
+    return 1
+  else
+    if [[ "$SCORE1" -eq "$SCORE2" ]];then
+      echo "e" # both versions are equal
+      return 0
+    fi
+    if [[ "$SCORE1" -gt "$SCORE2" ]];then
+      echo "g" # first version provided is greater ('g') or more recent
+      return 0
+    fi
+    if [[ "$SCORE1" -lt "$SCORE2" ]];then
+      echo "s" # first version provided is smaller ('s') or earlier
+    fi
+  fi
 }
