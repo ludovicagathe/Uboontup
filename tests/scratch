@@ -14,43 +14,43 @@ documentation() {
 
 }
 
-enable_bash_customisations() { # Check .bashrc and source from customisation files
-  local BASHRC_FILE="$HOME/.bashrc_test"
+enable_bash_customisations() { # Check .bashrc and source for customisation files
+  if [[ -z "$ERROR_STRING" ]]; then
+    ERROR_STRING="Err"
+  fi
+  #local BASHRC_FILE="$HOME/.bashrc_test"
+  local BASHRC_FILE="./sc_test"
   local CUSTOM_FILE='../custom/uboontup_aliases_and_functions'
-  local RX='source .*bash_aliases_and_functions'
-  local LINE='source ../bash_aliases_and_functions'
-  local INSERT=""
-  local VERSION=$(sed -n 's/.*\(## Version: \)\([v\.0-9]*\).*/\2/p' "$CUSTOM_FILE")
-  local TEMP=$(cat "$BASHRC_FILE"|grep "$RX")
-  echo $VERSION
-  local SOURCES=$(sed -n "/$RX/p" "$BASHRC_FILE"|wc -l)
-  echo $SOURCES
-  # search for source line in .bashrc
-  # if exists:
+  local RGX='source .*uboontup_aliases_and_functions'
+  #local LINE='source ../uboontup_aliases_and_functions'
+  #local INSERT=""
+  local VERSION=$(sed -n 's/.*\(## Uboontup Version: \)\([v\.0-9]*\).*/\2/p' "$CUSTOM_FILE")
+  local SOURCES=$(sed -n "/$RGX/p" "$BASHRC_FILE"|wc -l)
+  if [[ -f "$BASHRC_FILE" ]]; then
+    if [[ ! -z "$TEMP" ]]; then
+      echo -e "${YELLOW}Bash customisations found${NC}"
+      return 0
+    fi
+    if [[ "$(ask_confirmation 'Install bash aliases and helper functions to your .bashrc?')" == "y" ]]; then
+      echo
+      INSERT="\n## Bash customisations (v0.1): aliases and functions\n$LINE"
+      echo -e "$INSERT" >> "$BASHRC_FILE"
+    else
+      echo
+      return 0
+    fi
+  else
+    local ERROR_MESSAGE=".bashrc file not found"
+    echo -e "${RED}$ERROR_MESSAGE${NC}" >&2
+    echo "Please check that you have Bash installed and configured correctly" >&2
+    critical_error "$ERROR_MESSAGE"
+    return 1
+  fi
     # get custom file version
     # if version != current
       # propose to replace lines and file
   # else
     # propose to install
-
-  if [[ -f "$BASHRC_FILE" ]]; then
-    if [[ ! -z "$TEMP" ]]; then
-      echo -e "${YELLOW}Bash customisations found${NC}"
-  #     return 0
-  #   fi
-  #   if [[ "$(ask_confirmation 'Install bash aliases and helper functions to your .bashrc?')" == "y" ]]; then
-  #     echo
-  #     INSERT="\n## Bash customisations (v0.1): aliases and functions\n$LINE"
-  #     echo -e "$INSERT" >> "$BASHRC_FILE"
-  #   else
-  #     echo
-  #     return 0
-    fi
-  else
-    echo -e "${RED}.bashrc file not found${NC}"
-    echo "Please check that you have Bash installed and configured correctly"
-    echo "error logged and exit"
-  fi
 }
 
 erase_line() {
@@ -64,5 +64,6 @@ erase_line() {
 
 
 
-# documentation
+#documentation
 #enable_bash_customisations
+#source ../unit_tests/test_check_customisations.sh

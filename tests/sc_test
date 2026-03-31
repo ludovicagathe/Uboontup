@@ -2,3 +2,7 @@ line 1
 line 2
 line 3
 line 4
+## Uboontup Version: v0.0.1
+source ../uboontup_aliases_and_functions
+some code
+## Version: v0.0.2

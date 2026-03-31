@@ -1,4 +1,4 @@
-## Version: v0.0.1
+## Uboontup Version: v0.0.1
 # ALIASES
 alias ll="ls -alh"
 alias mkexec="chmod +x"

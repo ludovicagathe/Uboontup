@@ -9,6 +9,12 @@ define_font_colours() {
   NC='\033[0m' # No color
 }
 
+critical_error() { # Flag and log a critical error to syslog and exit script
+  echo "$0:$1" >&2
+  logger -t $(basename "$0") -p user.err $1
+  exit 1
+}
+
 set_base_dir() { # Set base directory to either $HOME (production) or test_home (development)
   if [[ ! $(basename $PWD) == "uboontup" ]]; then
     BASE_DIR=$PWD/test_home;
