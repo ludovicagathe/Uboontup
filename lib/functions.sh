@@ -1,7 +1,7 @@
 # Helper and library functions
 
 # FUNCTIONS
-define_font_colours() {
+define_font_colours() { # Define font colours for outputting errors (red), warnings(yellow), information (cyan) or confirmation (green)
   RED='\033[1;31m' # Error
   YELLOW='\033[1;33m' # Warning
   CYAN='\033[0;36m' # In progress
@@ -13,6 +13,28 @@ critical_error() { # Flag and log a critical error to syslog and exit script
   echo "$0:$1" >&2
   logger -t $(basename "$0") -p user.err $1
   exit 1
+}
+
+string_to_array() { # Split a string to an array. Using nameref to return an array to the first parameter. Compatible with bash 4.3+. An empty array should first be defined in the calling script. Usage: ARR=(); string_to_array ARR "\n" "$(cat sc_test)"; echo "${#ARR[@]}"
+  local OLDIFS=$IFS
+  local -n TO_ARRAY=$1
+  local SEPARATOR=$2
+  if [[ -z $SEPARATOR ]]; then
+    for (( i=0; i<${#3}; i++ )); do
+      TO_ARRAY+=("${3:$i:1}")
+    done
+    return 0
+  fi
+  if [[ "${SEPARATOR}" == "$'\n'" || "${SEPARATOR}" == "\n" ]]; then
+    IFS=$'\n'
+    TO_ARRAY=($3)
+    return 0
+  fi
+  IFS="$SEPARATOR"
+  echo "$3"
+  read -r -a TO_ARRAY <<< $3
+  IFS=$OLDIFS
+  return 0
 }
 
 set_base_dir() { # Set base directory to either $HOME (production) or test_home (development)
@@ -43,13 +65,11 @@ check_base_dir() { # Check if pwd is correct directory
   
 }
 
-# RETURN A TIMESTAMP - DATE STRING WITH TIME
-date_string() {
+date_string() { # Return a timestamp, including both date and time, of form YYYYmmddHHSS
   echo $(date +%Y%m%d%H%M%S)
 }
 
-# ASK FOR CONFIRMATION
-ask_confirmation() {
+ask_confirmation() { # Ask for user confirmation, no return or enter required
   if [[ -z "$1" ]]; then
     PROMPT="Confirm (y/n): ";
   else
@@ -64,8 +84,7 @@ ask_confirmation() {
   fi
 }
 
-# CHECK AND CREATE REQUIRED DIRECTORIES
-check_and_create_dir () {
+check_and_create_dir () { # Check for presence of required directories and create them if needed
   for user_dir in "$@"; do
     if [[ -d "$BASE_DIR/$user_dir" ]]; then
       echo -e "$BASE_DIR/$user_dir ${RED}already exits${NC}"|tee -a $BASE_DIR/logs/setup_00_init.log
@@ -87,8 +106,7 @@ check_and_create_dir () {
   done
 }
 
-# Parse options using getops
-parse_opts() {
+parse_opts() { # Parse options using getops
   local OPTIND=1
   local opt
   local rem_args=()
@@ -126,8 +144,7 @@ parse_opts() {
   fi
 }
 
-# BACK UP A FOLDER WITH POSSIBILITY TO EXCLUDE PREFIX
-backup_folder() {
+backup_folder() { # Back up a folder with possibility to exclude some name patterns
   local OPTIND=1
   local opt
   local rem_args=()
@@ -187,7 +204,7 @@ check_and_create_file() {
   echo test
 }
 
-detect_version () {
+detect_version () { # Extract version information from a string. Work in progress
   local VERSION
   local MESSAGE
   if [[ "$1" =~ ^[v]?[0-9]+(\.[0-9]+){1,2}(\-[a-zA-Z0-9\.\-]+)?$ ]]; then
@@ -215,12 +232,13 @@ get_version_score() { # Parse the version string and calculate the score, with: 
     echo "$ERROR_STRING"
     return 1
   fi
-  if [[ "${#@}" -gt 1 ]];then # Check for more than 1 argument supplied
+  if [[ "${#}" -gt 1 ]];then # Check for more than 1 argument supplied
     echo -e "${RED}Too many version arguments provided. You need to provide only 1 version strings${NC}" >&2
     echo "$ERROR_STRING"
     return 1
   fi
-  VERSION="$(cut -d '-' -f 1 <<< $1)"
+  VERSION="$(cut -d '-' -f 1 <<< $1)" # split at '-' for versions with -rc, -beta, -alpha tags
+  VERSION="$(cut -d '(' -f 1 <<< $VERSION)" # split at '(' to discard special sub-version mention, like for $BASH_VERSION giving 5.2.21(1)-release type
   if [[ "$VERSION" =~ ^[v]?[0-9]+$ ]]; then
     VERSION="$VERSION"".0.0"
   fi
@@ -235,10 +253,7 @@ get_version_score() { # Parse the version string and calculate the score, with: 
   if [[ "${1:0:1}" == "v" ]]; then # Check for "v" prefix and ignore
     VERSION="${1:1:$(( ${#1}-1 ))}"
   fi
-  OLDIFS=$IFS
-  IFS='.'
-  read -r -a DIGITS <<< $VERSION
-  IFS=$OLDIFS
+  OLDIFS=$IFS; IFS='.'; read -r -a DIGITS <<< $VERSION; IFS=$OLDIFS
   SCORE=0 # Initialise and compute score
   SCORE=$(( $SCORE + (( ${DIGITS[0]} * 1000000 )) + (( ${DIGITS[1]} * 1000 )) + (( ${DIGITS[2]} * 1 )) ))
   echo "$SCORE"

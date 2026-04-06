@@ -45,6 +45,7 @@ assert "Version string with 5 '0' components" "$ERROR_STRING" "$(get_version_sco
 assert "Valid version string 1.1.1" "1001001" "$(get_version_score '1.1.1')"
 assert "Valid version string 1.2.3" "1002003" "$(get_version_score '1.2.3')"
 assert "Valid version string 0.0.0" "0" "$(get_version_score '0.0.0')"
+assert "Valid version string 5.2.21(1)-release" "5002021" "$(get_version_score '5.2.21(1)-release')"
 assert "Valid version string upper bound 999.999.999" "999999999" "$(get_version_score '999.999.999')"
 assert "Valid version string with insane version 3333.2222.1111" "3335223111" "$(get_version_score '3333.2222.1111')"
 assert "Valid version string with rc flag" "1002003" "$(get_version_score '1.2.3-rc1')"

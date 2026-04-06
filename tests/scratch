@@ -4,6 +4,18 @@
 source ../lib/functions.sh
 define_font_colours
 
+recho() {
+  echo -e "${RED}$1${NC}"
+}
+
+yecho() {
+  echo -e "${YELLOW}$1${NC}"
+}
+
+gecho() {
+  echo -e "${GREEN}$1${NC}"
+}
+
 documentation() {
   echo "-----------------------------------------------------"
   echo "|               Welcome to Uboontup !               |"
@@ -53,17 +65,71 @@ enable_bash_customisations() { # Check .bashrc and source for customisation file
     # propose to install
 }
 
-erase_line() {
-  local BASHRC_FILE="$HOME/.bashrc_test"
-  local RX='source .*bash_aliases_and_functions'
-  local LINE='source ../bash_aliases_and_functions'
-  local INSERT=""
-  local TEMP=$(cat "$BASHRC_FILE"|grep "$RX")
-  sed -n "/$RX/p" "$BASHRC_FILE"
+edit_line() { # Edit a line in a file. A wrapper around the sed function, taking a search string and replacing it with another insert string in a file. Accepts 3 arguments: 1. the search string; 2. the replacement string; 3. the file to edit. Uses grep with basic regex for line search under the hood and sed for replacement. Returns the number of matches found
+  if [[ -z "$ERROR_STRING" ]]; then
+    ERROR_STRING="Err"
+  fi
+  if [[ "$#" -lt 3 ]]; then
+    recho "This function requires at least 3 arguments" >&2
+    echo "$ERROR_STRING"
+    return 1
+  fi
+  if [[ ! -f $3 ]]; then
+    recho "$3 is not a regular file" >&2
+    echo "$ERROR_STRING"
+    return 1
+  fi
+  local LINE_NUM SEARCH REPLACE NEW_LINE MATCHES CONF
+  SEARCH="$1"
+  if [[ "$SEARCH" == "\n" ]]; then
+    SEARCH=$'\n'
+  fi
+  REPLACE="$2"
+  local LINES="$(grep $SEARCH $3)"
+  OLD_IFS=$IFS; IFS=$'\n'; LINES=($LINES); IFS=$OLD_IFS
+  MATCHES="${#LINES[@]}"
+  if [[ "$MATCHES" -eq 0 ]]; then
+    yecho "No match found in file" >&2
+    echo "$MATCHES"
+    return 0
+  fi
+  if [[ "$4" == '-v' ]]; then
+    echo "Matches found:" >&2
+    for i in "${!LINES[@]}"; do
+      echo "$(( $i + 1 )). ${LINES[$i]}" >&2
+    done
+  fi
+  for item in "${LINES[@]}"; do
+    NEW_LINE=$(sed -n "s/${SEARCH//\//\\/}/${REPLACE//\//\\/}/p" <<< ${item})
+    CONF='y'
+    if [[ "$4" == '-v' ]]; then
+      yecho "=====================" >&2
+      yecho "Before Edit" >&2
+      echo "${item}" >&2
+      yecho "After Edit" >&2
+      echo "${NEW_LINE}" >&2
+      yecho "=====================" >&2
+      CONF=$(ask_confirmation)
+    fi
+    if [[ "$CONF" == 'y' ]]; then
+      sed -i "s/${item//\//\\/}/${NEW_LINE//\//\\/}/" $3
+      echo >&2
+    else
+      MATCHES="$(( ${MATCHES} - 1 ))"
+    fi
+  done
+  cat $3 >&2
+  echo >&2
+  echo "${MATCHES}"
+  cp sc_test.bak sc_test
 }
 
 
 
 #documentation
 #enable_bash_customisations
-#source ../unit_tests/test_check_customisations.sh
+#source ./unit_tests/test_check_customisations.sh
+#source ./unit_tests/test_edit_line.sh
+#source ./unit_tests/test_get_version_score.sh
+source ./unit_tests/test_edit_line.sh
+#edit_line 'c\(o\?d\?\)e' 'test' 'sc_test' -v
