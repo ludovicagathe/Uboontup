@@ -2,8 +2,10 @@
 -[ ] Helper functions
 -[ ] Get package list
 -[ ] Install packages
+-[ ] Create public and private keys for repos cloning
 -[ ] Install benchmark tools
--[ ] Benchmark services
+-[ ] Benchmark default services
+-[ ] Pull feature repositories
 -[ ] Optimise configurations
 -[ ] Benchmark after optimisation
 -[ ] Harden

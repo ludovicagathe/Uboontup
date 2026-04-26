@@ -65,7 +65,7 @@ enable_bash_customisations() { # Check .bashrc and source for customisation file
     # propose to install
 }
 
-edit_line() { # Edit a line in a file. A wrapper around the sed function, taking a search string and replacing it with another insert string in a file. Accepts 3 arguments: 1. the search string; 2. the replacement string; 3. the file to edit. Uses grep with basic regex for line search under the hood and sed for replacement. Returns the number of matches found
+edit_line() { # Edit a line in a file. A wrapper around the sed function, taking a search string and replacing it with another insert string in a file. Accepts 3 arguments: 1. the search string; 2. the replacement string; 3. the file to edit. Uses grep with basic regex for line search under the hood and sed for replacement. Returns the number of matches found. Options are: -v (verbose and interactive) to print matches and replacement and require confirmation for replacement; -s (single) for replacement of a single instance of pattern, shifting to interactive mode if multiple instances are found.
   if [[ -z "$ERROR_STRING" ]]; then
     ERROR_STRING="Err"
   fi
@@ -74,12 +74,19 @@ edit_line() { # Edit a line in a file. A wrapper around the sed function, taking
     echo "$ERROR_STRING"
     return 1
   fi
+  local MODE="n"
+  if [[ $4 == "-s" || $5 == "-s" ]]; then
+    MODE="s"
+  fi
+  if [[ $4 == "-v" || $5 == "-v" ]]; then
+    MODE="v"
+  fi
   if [[ ! -f $3 ]]; then
     recho "$3 is not a regular file" >&2
     echo "$ERROR_STRING"
     return 1
   fi
-  local LINE_NUM SEARCH REPLACE NEW_LINE MATCHES CONF
+  local LINE_NUM SEARCH REPLACE NEW_LINE MATCHES CONF REPLACEMENTS
   SEARCH="$1"
   if [[ "$SEARCH" == "\n" ]]; then
     SEARCH=$'\n'
@@ -93,16 +100,17 @@ edit_line() { # Edit a line in a file. A wrapper around the sed function, taking
     echo "$MATCHES"
     return 0
   fi
-  if [[ "$4" == '-v' ]]; then
+  if [[ "$MODE" == 'v' ]]; then
     echo "Matches found:" >&2
     for i in "${!LINES[@]}"; do
       echo "$(( $i + 1 )). ${LINES[$i]}" >&2
     done
   fi
+  REPLACEMENTS=0
   for item in "${LINES[@]}"; do
     NEW_LINE=$(sed -n "s/${SEARCH//\//\\/}/${REPLACE//\//\\/}/p" <<< ${item})
     CONF='y'
-    if [[ "$4" == '-v' ]]; then
+    if [[ "$MODE" == 'v' || "$MODE" == "s" ]]; then
       yecho "=====================" >&2
       yecho "Before Edit" >&2
       echo "${item}" >&2
@@ -112,15 +120,20 @@ edit_line() { # Edit a line in a file. A wrapper around the sed function, taking
       CONF=$(ask_confirmation)
     fi
     if [[ "$CONF" == 'y' ]]; then
+      REPLACEMENTS="$(( ${REPLACEMENTS} + 1 ))"
       sed -i "s/${item//\//\\/}/${NEW_LINE//\//\\/}/" $3
       echo >&2
+      if [[ "$MODE" == 's' ]]; then
+        break
+      fi
     else
       MATCHES="$(( ${MATCHES} - 1 ))"
+      echo >&2
     fi
   done
-  cat $3 >&2
+  #cat $3 >&2
   echo >&2
-  echo "${MATCHES}"
+  echo "${REPLACEMENTS}"
   cp sc_test.bak sc_test
 }
 

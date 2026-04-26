@@ -9,7 +9,7 @@ define_font_colours() { # Define font colours for outputting errors (red), warni
   NC='\033[0m' # No color
 }
 
-critical_error() { # Flag and log a critical error to syslog and exit script
+critical_error() { # Flag and log a critical error to syslog and exit script. Expect a descriptive message as first argument.
   echo "$0:$1" >&2
   logger -t $(basename "$0") -p user.err $1
   exit 1
