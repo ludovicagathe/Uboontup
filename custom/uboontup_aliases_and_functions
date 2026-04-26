@@ -15,6 +15,7 @@ gcom() {
   else
     DETAILS=$1
   fi
+  git submodule update --remote --recursive
   git add .
   git commit -am "$(date +%Y%m%d%H%M) - $DETAILS"
 }
