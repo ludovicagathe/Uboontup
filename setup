@@ -22,6 +22,7 @@ date_string() {
 
 # ASK FOR CONFIRMATION
 ask_confirmation() {
+  local PROMPT REPLY
   if [[ -z "$1" ]]; then
     PROMPT="Confirm (y/n): ";
   else

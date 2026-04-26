@@ -108,7 +108,7 @@ edit_line() { # Edit a line in a file. A wrapper around the sed function, taking
   fi
   REPLACEMENTS=0
   for item in "${LINES[@]}"; do
-    NEW_LINE=$(sed -n "s/${SEARCH//\//\\/}/${REPLACE//\//\\/}/p" <<< ${item})
+    NEW_LINE=$(sed -n "s/${SEARCH//\//\\/}/${REPLACE//\//\\/}/p" <<< "${item}")
     CONF='y'
     if [[ "$MODE" == 'v' || "$MODE" == "s" ]]; then
       yecho "=====================" >&2

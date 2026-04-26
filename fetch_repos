@@ -1,0 +1,11 @@
+#!/bin/bash
+source ./lib/functions.sh
+
+# FONT COLORS
+define_font_colours
+
+# check if repos exists
+# check if git is installed
+# clone
+# report repos not found
+# report other errors
