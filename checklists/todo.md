@@ -1,4 +1,5 @@
 -[ ] Documentation
+-[ ] Make scripts and libraries accessible by fixing relative paths
 -[ ] Helper functions
 -[ ] Get package list
 -[ ] Install packages

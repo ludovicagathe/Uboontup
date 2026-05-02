@@ -38,10 +38,13 @@ This is a work in progress which is still basic in terms of features and at a ve
 
 ```bash
 # Clone the repository
-git clone https://github.com/ludovicagathe/Uboontup.git
+git clone https://github.com/ludovicagathe/Uboontup.git uboontup
 
 # Navigate to the directory
-cd Uboontup
+cd uboontup
+
+# Clone and initialise feature repositories
+git submodule update --init --recursive
 
 # Make the setup script executable
 chmod +x setup
@@ -56,10 +59,13 @@ A test suite is provided that will simulate the script and will not make any per
 
 ```bash
 # Clone the repository
-git clone https://github.com/ludovicagathe/uboontup.git
+git clone https://github.com/ludovicagathe/Uboontup.git uboontup
 
 # Navigate to the directory
 cd uboontup/tests
+
+# Clone and initialise feature repositories
+git submodule update --init --recursive
 
 # Make the setup script executable
 chmod +x test.sh
