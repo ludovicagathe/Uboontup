@@ -6,6 +6,8 @@ alias aup="sudo apt update && sudo apt upgrade && sudo apt dist-upgrade && sudo 
 alias aupr="sudo apt update && sudo apt upgrade && sudo apt dist-upgrade && sudo reboot"
 alias catlog="tail -n 100 /var/log/syslog|grep"
 alias nbrc="nano -l ~/.bashrc"
+alias python="python3"
+alias pip="pip3"
 
 # FUNCTIONS
 # git commit -am "YYYYmmddHHMM - Details"
