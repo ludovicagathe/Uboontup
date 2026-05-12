@@ -31,6 +31,10 @@ nvm install --lts
 
 # INSTALL TMUX PLUGINS
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+## Install plugins by pressing Ctrl+b -> I (capital i, as in Install) in tmux
+echo "Please open tmux and press Ctrl+b -> I (capital i, as in Install) to install the plugins. After that, you can exit tmux by typing 'exit' or pressing Ctrl+d."
+read -n 1 -s -r -p $'Press any key to continue to launch tmux and install plugins\n'
+tmux
 
 if [[ $PREV_DIR == $(pwd) ]]; then
   echo
