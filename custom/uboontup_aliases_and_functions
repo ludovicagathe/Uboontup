@@ -6,12 +6,12 @@ alias aup="sudo apt update && sudo apt upgrade && sudo apt dist-upgrade && sudo 
 alias aupr="sudo apt update && sudo apt upgrade && sudo apt dist-upgrade && sudo reboot"
 alias catlog="tail -n 100 /var/log/syslog|grep"
 alias nbrc="nano -l ~/.bashrc"
+alias glog="git log --oneline -5"
 alias python="python3"
 alias pip="pip3"
 
 # FUNCTIONS
-# git commit -am "YYYYmmddHHMM - Details"
-gcom() {
+gcom() { # git commit -am "YYYYmmddHHMM - Details"
   if [[ -z $1 ]]; then
     DETAILS="Work in progress"
   else
@@ -22,8 +22,7 @@ gcom() {
   git commit -am "$(date +%Y%m%d%H%M) - $DETAILS"
 }
 
-# git tag -a v1.4 -m "my version 1.4"
-gtag() {
+gtag() { # git tag -a v1.4 -m "my version 1.4"
   local VERSION
   local MESSAGE
   if [[ -z "$1" ]];then

@@ -22,7 +22,7 @@ cd $PREV_DIR
 # INSTALL PACKAGES
 sudo apt update
 sudo apt upgrade
-sudo apt install build-essential software-properties-common gcc g++ perl make git curl wget gpg net-tools zip unzip ffmpeg ufw openssl dkms ubuntu-restricted-extras python3 htop tmux
+sudo apt install build-essential software-properties-common gcc g++ perl make git curl wget gpg net-tools zip unzip ffmpeg ufw openssl dkms ubuntu-restricted-extras python3 htop tmux ca-certificates gnupg
 sudo apt autoremove --purge -y
 
 # INSTALL NVM AND NODEJS

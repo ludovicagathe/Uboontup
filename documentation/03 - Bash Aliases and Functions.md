@@ -5,8 +5,11 @@
 - mkexec [FILE]- make a file (argument) executable
 - aup - update without restart, running apt update, upgrade and dist-upgrade as well as updating snaps
 - aupr - same as aup, quicker, minus snap update but with restart
--catlog [STRING] - tail the last 100 lines of var syslog and filter for text argument with grep
+- catlog [STRING] - tail the last 100 lines of `/var/syslog` and filter for text argument with grep
 - nbrc - edit the .bashrc with nano
+- glog - log the 5 last commits with the `--oneline` format
+- python - short for `python3`
+- pip - short for `pip3`
 
 ## Functions
 - gcom [MESSAGE] - performs git commit with a time-stamped (format: YYYYmmddHHMM) message string [MESSAGE]. If no message is provided, the timestamp and the default message "Work in progress". Shortens and provides a default for `git commit -am "YYYYmmddHHMM - Details"`
