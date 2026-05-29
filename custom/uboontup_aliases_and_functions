@@ -9,6 +9,9 @@ alias nbrc="nano -l ~/.bashrc"
 alias glog="git log --oneline -5"
 alias python="python3"
 alias pip="pip3"
+alias sla="sudo ls -alh"
+alias scd="sudo cd"
+alias runroot="sudo -H -u root bash"
 
 # FUNCTIONS
 gcom() { # git commit -am "YYYYmmddHHMM - Details"

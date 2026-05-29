@@ -1,7 +1,9 @@
+#!/bin/bash
 # This script installs Docker on Ubuntu. It is based on the official Docker installation instructions for Ubuntu, which can be found here: https://docs.docker.com/engine/install/ubuntu/
 # Ask user to confirm before proceeding, as this script will make changes to the system and may require a restart. The user can choose to skip the installation if they do not want to proceed.
 
 read -p $'This script will make changes to the system to install \033[1;32mDocker\033[0m. Do you want to continue? (\033[1;32my\033[0m/\033[1;31mn\033[0m): ' -n 1 -r
+echo ""
 if [[ ! $REPLY =~ ^[Yy]$ && -n $REPLY ]]; then
   echo "Docker installation skipped. You can run this script again later to install it."
   exit 0

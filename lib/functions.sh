@@ -1,3 +1,4 @@
+#!/bin/bash
 # Helper and library functions
 
 # FUNCTIONS
@@ -228,13 +229,13 @@ get_version_score() { # Parse the version string and calculate the score, with: 
   fi
   local VERSION DIGITS OLDIFS SCORE
   if [[ -z "$1" ]];then # Check for empty or no argument supplied
-    echo -e "${RED}Version arguments are missing. You need to provide a version string of form \"v0.0.0\"${NC}" >&2
     echo "$ERROR_STRING"
+    echo -e "${RED}Version arguments are missing. You need to provide a version string of form \"v0.0.0\"${NC}" >&2
     return 1
   fi
   if [[ "${#}" -gt 1 ]];then # Check for more than 1 argument supplied
-    echo -e "${RED}Too many version arguments provided. You need to provide only 1 version strings${NC}" >&2
     echo "$ERROR_STRING"
+    echo -e "${RED}Too many version arguments provided. You need to provide only 1 version strings${NC}" >&2
     return 1
   fi
   VERSION="$(cut -d '-' -f 1 <<< $1)" # split at '-' for versions with -rc, -beta, -alpha tags
@@ -246,8 +247,8 @@ get_version_score() { # Parse the version string and calculate the score, with: 
     VERSION="$VERSION"".0"
   fi
   if [[ ! "$VERSION" =~ ^[v]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo -e "${RED}You need to provide a version string of form \"v0.0.0\"${NC}" >&2
     echo "$ERROR_STRING"
+    echo -e "${RED}You need to provide a version string of form \"v0.0.0\"${NC}" >&2
     return 1
   fi
   if [[ "${1:0:1}" == "v" ]]; then # Check for "v" prefix and ignore
@@ -266,15 +267,15 @@ compare_versions() { # Compare two version strings of form "vX.X.X" or "X.X.X" (
   fi
   local SCORE1 SCORE2
   if [[ -z "$1" || -z "$2" || ${#@} -gt 2 ]];then
-    echo -e "${RED}Version arguments are not adequate. You need to provide 2 version strings of form 'vX.X.X' or 'X.X.X'${NC}" >&2
     echo "$ERROR_STRING"
+    echo -e "${RED}Version arguments are not adequate. You need to provide 2 version strings of form 'vX.X.X' or 'X.X.X'${NC}" >&2
     return 1
   fi
   SCORE1=$(get_version_score $1)
   SCORE2=$(get_version_score $2)
   if [[ "$SCORE1" == "$ERROR_STRING" || "$SCORE2" == "$ERROR_STRING" ]]; then
-    echo -e "${RED}Invalid version arguments supplied${NC}" >&2
     echo "$ERROR_STRING"
+    echo -e "${RED}Invalid version arguments supplied${NC}" >&2
     return 1
   else
     if [[ "$SCORE1" -eq "$SCORE2" ]];then

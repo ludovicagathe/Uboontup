@@ -137,12 +137,58 @@ edit_line() { # Edit a line in a file. A wrapper around the sed function, taking
   cp sc_test.bak sc_test
 }
 
+test_scan(){ # This function will scan through a .tst file for test variables. The first line give the function name, the second a general description and subsequent lines will list results and arguments in test> result> val <result arg> arg <arg <test. All the fields are described in a simple markup format tag>value<tag
+  if [[ -z "$ERROR_STRING" ]]; then
+    ERROR_STRING="Err"
+  fi
+  if [[ "$#" -ne 1 ]]; then
+    echo "$ERROR_STRING"
+    recho "${RED}This function requires exactly 1 argument${NC}" >&2
+    return 1
+  fi
 
+  local lines line func desc current_tag current_value multiline
+  local test=()
+  read -r -a lines <<< $(wc -l $1)
+  lines=$(( 1 + "$lines" - 1 ))
+  echo "${lines[0]}"
+
+  line=0
+  OLDIFS=$IFS
+  multiline=1
+  while IFS= read -r line; do
+    if [[ "$multiline" == 1 && "${line:0:1}" == '#' || "$line" == "" || "$line" == " " ]]; then
+      continue
+    fi
+    if [[ "$multiline" == 0 ]]; then
+      if [[ "${line:0:1}" == '<' || "$line" == "" || "$line" == " " ]]; then
+        multiline=1
+        continue
+      fi
+    fi
+    for (( i=0; i<${#line}; i++ )); do
+      if [[ "${line:$i:1}" == ">" ]]; then
+        break
+      fi
+      current_tag+="${line:$i:1}"
+    done
+    current_value="${line#*>}"
+    current_value="${current_value%<$current_tag*}"
+    if [[ -z "$current_value"]]; then
+      multiline=0
+      continue
+    fi
+    echo "Tag: $current_tag, Value: $current_value"
+    current_tag=""
+    current_value=""
+  done < example.tst
+}
 
 #documentation
 #enable_bash_customisations
 #source ./unit_tests/test_check_customisations.sh
 #source ./unit_tests/test_edit_line.sh
 #source ./unit_tests/test_get_version_score.sh
-source ./unit_tests/test_edit_line.sh
+#source ./unit_tests/test_edit_line.sh
 #edit_line 'c\(o\?d\?\)e' 'test' 'sc_test' -v
+test_scan example.tst

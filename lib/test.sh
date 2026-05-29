@@ -1,3 +1,5 @@
+#!/bin/bash
+
 assert() { # Test function requiring 3 arguments: 1. a string describing the test; 2. the expected result string or number; 3. the actual outcome of a function or other output from $(). Prints expected and result on failure, clipping both to their first 20 characters.
 ## Todo: make assert accept several possible results
   local DESCRIPTION=$1
