@@ -1,19 +1,17 @@
-function>function_name<function
-description>This is a general description of the function, including arguments.<description
+function=function_name
+description=This is a general description of the function, including arguments.
 # TESTS
-test>
-result>some result<result
-arg>some argument<arg
-<test
+teststart
+test="Some test"
+result=some result
+arg=some argument
+arg=some other argument \
+arg=some test with "="
+testend
 
-test>
-result>some other result
-some line<
-arg>arg1<arg
-arg>arg2<arg
-<test
 
 # to do:
-# check if opening and closing tags
 # check for multiline values
 # check for arrays
+# check for "" around strings
+# check for \ at the end of the line

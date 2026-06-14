@@ -1,21 +1,10 @@
 #!/bin/bash
 # Helper and library functions
 
+# Source messages.sh to access communication and output helper functions
+source ../lib/messages.sh
+
 # FUNCTIONS
-define_font_colours() { # Define font colours for outputting errors (red), warnings(yellow), information (cyan) or confirmation (green)
-  RED='\033[1;31m' # Error
-  YELLOW='\033[1;33m' # Warning
-  CYAN='\033[0;36m' # In progress
-  GREEN='\033[1;32m' # Success
-  NC='\033[0m' # No color
-}
-
-critical_error() { # Flag and log a critical error to syslog and exit script. Expect a descriptive message as first argument.
-  echo "$0:$1" >&2
-  logger -t $(basename "$0") -p user.err $1
-  exit 1
-}
-
 string_to_array() { # Split a string to an array. Using nameref to return an array to the first parameter. Compatible with bash 4.3+. An empty array should first be defined in the calling script. Usage: ARR=(); string_to_array ARR "\n" "$(cat sc_test)"; echo "${#ARR[@]}"
   local OLDIFS=$IFS
   local -n TO_ARRAY=$1
@@ -68,21 +57,6 @@ check_base_dir() { # Check if pwd is correct directory
 
 date_string() { # Return a timestamp, including both date and time, of form YYYYmmddHHSS
   echo $(date +%Y%m%d%H%M%S)
-}
-
-ask_confirmation() { # Ask for user confirmation, no return or enter required
-  if [[ -z "$1" ]]; then
-    PROMPT="Confirm (y/n): ";
-  else
-    PROMPT="$1"$'\nConfirm (y/n): '
-  fi
-  read -p "$PROMPT" -n 1 -r
-  if [[ $REPLY =~ ^[Yy]$ ]]
-    then
-      printf "y";
-    else
-      printf "n";
-  fi
 }
 
 check_and_create_dir () { # Check for presence of required directories and create them if needed

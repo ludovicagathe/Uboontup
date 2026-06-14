@@ -12,6 +12,9 @@ alias pip="pip3"
 alias sla="sudo ls -alh"
 alias scd="sudo cd"
 alias runroot="sudo -H -u root bash"
+alias cls="clear"
+alias ..="cd .."
+alias ...="cd ../.."
 
 # FUNCTIONS
 gcom() { # git commit -am "YYYYmmddHHMM - Details"
