@@ -59,3 +59,13 @@ run_and_log() { # Run a command and log its output and errors to a file. Accepts
   fi
   return 0
 }
+
+welcome() {
+  echo "-----------------------------------------------------"
+  echo "|               Welcome to Uboontup !               |"
+  echo "|                                                   |"
+  echo "|      An easy way to get Ubuntu up and running     |"
+  echo "|               for some serious work               |"
+  echo "-----------------------------------------------------"
+  echo ""
+}

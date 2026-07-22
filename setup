@@ -4,6 +4,9 @@ source ./lib/functions.sh
 # FONT COLORS
 define_font_colours
 
+# Welcome
+welcome
+
 # SET BASE DIRECTORY
 if [[ $(basename "$0") == "setup" ]]; then
   BASE_DIR=$HOME;
