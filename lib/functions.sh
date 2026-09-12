@@ -27,6 +27,23 @@ string_to_array() { # Split a string to an array. Using nameref to return an arr
   return 0
 }
 
+arg_is_uint() { # Check if the argument is a number. Accepts 1 argument: the argument to check. Returns 0 if the argument is a number, 1 otherwise.
+  if [[ -z "$ERROR_STRING" ]]; then
+    ERROR_STRING="Err"
+  fi
+  if [[ "$#" -ne 1 ]]; then
+    echo "${ERROR_STRING}"
+    recho "This function requires exactly 1 argument" >&2
+    return 1
+  fi
+  if [[ ! "$1" =~ ^[0-9]+$ ]]; then
+    echo "${ERROR_STRING}"
+    recho "Argument is not a number" >&2
+    return 1
+  fi
+  return 0
+}
+
 set_base_dir() { # Set base directory to either $HOME (production) or test_home (development)
   if [[ ! $(basename $PWD) == "uboontup" ]]; then
     BASE_DIR=$PWD/test_home;

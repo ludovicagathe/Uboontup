@@ -30,7 +30,7 @@ fi
 # Install QEMU and KVM packages
 sudo apt update
 (( EXIT_CODE+=$? ))
-sudo apt install qemu-system-x86 libvirt-daemon-system virtinst virt-manager virt-viewer ovmf swtpm qemu-utils libvirt-clients bridge-utils guestfs-tools libosinfo-bin tuned
+sudo apt install qemu-system-x86 libvirt-daemon-system virtinst virt-manager virt-viewer ovmf swtpm qemu-utils libvirt-clients bridge-utils libguestfs-tools libosinfo-bin tuned
 (( EXIT_CODE+=$? ))
 
 if [[ $EXIT_CODE -ne 0 ]]; then
