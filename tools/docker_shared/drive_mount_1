@@ -1,0 +1,456 @@
+#!/usr/bin/env bash
+
+set -u
+
+SCRIPT_NAME=$(basename "$0")
+MOUNT_ROOT=""
+NBD_DEVICE=""
+IMAGE_MOUNT=""
+PROBE_MOUNT=""
+CREATED_MOUNT_POINT=false
+KEEP_MOUNT=false
+
+print_documentation() {
+	cat <<'DOCUMENTATION'
+This script locates and mounts a virtual hard-drive image.
+
+1. It lists mounted partitions and lets you select one by filesystem label.
+2. It gives you a text tree browser for that partition so you can choose an
+	 image file (.img, .raw, .iso, .qcow2, .vdi, .vmdk, or .vhdx).
+3. It mounts an ISO directly, or attaches another virtual disk image with
+	 qemu-nbd and lets you select the image partition by label. VHDX images
+	 require guestfs-tools and are checked before mounting.
+4. Before mounting, it temporarily attaches the selected image file, checks
+	 it for existing filesystems, and lets you select one. Non-ext4 filesystems
+	 require an additional warning.
+5. If no filesystem exists, it can create one whole-drive ext4 partition after
+	 confirmation.
+6. Temporary mounts and NBD connections are removed when the script exits.
+
+The script needs sudo to mount partitions, create temporary mount points, and
+possibly attach an image. It changes the system while it is running. Only
+continue if you understand and trust the image you selected.
+DOCUMENTATION
+	printf '\n'
+}
+
+finish() {
+	local exit_code=$?
+
+	if [[ "$KEEP_MOUNT" != true ]]; then
+		if [[ -n "$IMAGE_MOUNT" ]] && mountpoint -q "$IMAGE_MOUNT"; then
+			sudo umount "$IMAGE_MOUNT" >/dev/null 2>&1 || true
+		fi
+		if [[ -n "$NBD_DEVICE" ]] && [[ -e "$NBD_DEVICE" ]]; then
+			sudo qemu-nbd --disconnect "$NBD_DEVICE" >/dev/null 2>&1 || true
+		fi
+	fi
+	if [[ -n "$PROBE_MOUNT" ]] && mountpoint -q "$PROBE_MOUNT"; then
+		sudo umount "$PROBE_MOUNT" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$MOUNT_ROOT" ]] && mountpoint -q "$MOUNT_ROOT"; then
+		sudo umount "$MOUNT_ROOT" >/dev/null 2>&1 || true
+	fi
+	if [[ "$KEEP_MOUNT" != true && "$CREATED_MOUNT_POINT" == true && -n "$IMAGE_MOUNT" ]]; then
+		sudo rmdir "$IMAGE_MOUNT" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$MOUNT_ROOT" ]]; then
+		sudo rmdir "$MOUNT_ROOT" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$PROBE_MOUNT" ]]; then
+		sudo rmdir "$PROBE_MOUNT" >/dev/null 2>&1 || true
+	fi
+	exit "$exit_code"
+}
+trap finish EXIT INT TERM
+
+confirm() {
+	local answer
+	while true; do
+		read -r -p "$1 (y/n): " answer
+		case "$answer" in
+			[Yy]) return 0 ;;
+			[Nn]) return 1 ;;
+			*) echo "Please answer y or n." ;;
+		esac
+	done
+}
+
+require_command() {
+	if ! command -v "$1" >/dev/null 2>&1; then
+		echo "Error: required command '$1' was not found." >&2
+		exit 1
+	fi
+}
+
+check_vhdx_support() {
+	if command -v guestmount >/dev/null 2>&1; then
+		echo "guestfs-tools detected (guestmount: $(command -v guestmount))."
+		return 0
+	else
+		echo "VHDX support requires guestfs-tools (guestmount), but it is not installed." >&2
+		echo "Install it with: sudo apt install guestfs-tools" >&2
+		return 1
+	fi
+}
+
+directory_is_available() {
+	local directory=$1
+	[[ -d "$directory" ]] || return 1
+	mountpoint -q "$directory" && return 1
+	[[ -z "$(find "$directory" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]
+}
+
+choose_mount_point() {
+	local selection directory directory_name
+	local -a mount_directories
+
+	while true; do
+		echo "Contents of /mnt:"
+		ls -la /mnt 2>/dev/null || echo "Unable to list /mnt."
+		echo
+		echo "Directories under /mnt:"
+		mount_directories=()
+		while IFS= read -r -d '' directory; do
+			mount_directories+=("$directory")
+		done < <(find /mnt -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+
+		if [[ "${#mount_directories[@]}" -eq 0 ]]; then
+			echo "  No directories found."
+		else
+			for selection in "${!mount_directories[@]}"; do
+				directory=${mount_directories[selection]}
+				if directory_is_available "$directory"; then
+					echo "  $((selection + 1))) $directory (available)"
+				else
+					echo "  $((selection + 1))) $directory (not available)"
+				fi
+			done
+		fi
+		echo "  n) Create a new mount directory"
+		echo "  q) Exit without mounting"
+		read -r -p "Select an existing empty directory or choose n: " selection
+
+		if [[ "$selection" == "q" ]]; then
+			echo "Exiting without mounting the virtual drive."
+			exit 0
+		elif [[ "$selection" == "n" ]]; then
+			read -r -p "Enter the new directory name under /mnt: " directory_name
+			if [[ -z "$directory_name" || "$directory_name" == */* || "$directory_name" == "." || "$directory_name" == ".." ]]; then
+				echo "Enter a simple directory name without '/'."
+				continue
+			fi
+			directory="/mnt/$directory_name"
+			if [[ -e "$directory" ]]; then
+				echo "$directory already exists. It must be an empty, unused directory."
+				continue
+			fi
+			if ! sudo mkdir "$directory"; then
+				echo "Could not create $directory. Choose another option."
+				continue
+			fi
+			if ! directory_is_available "$directory"; then
+				echo "$directory is not available for mounting."
+				sudo rmdir "$directory" 2>/dev/null || true
+				continue
+			fi
+			IMAGE_MOUNT=$directory
+			CREATED_MOUNT_POINT=true
+			return 0
+		elif [[ "$selection" =~ ^[0-9]+$ && -n "${mount_directories[selection - 1]:-}" ]]; then
+			directory=${mount_directories[selection - 1]}
+			if directory_is_available "$directory"; then
+				IMAGE_MOUNT=$directory
+				return 0
+			fi
+			echo "$directory is not empty or is already used by another drive."
+		else
+			echo "Invalid selection."
+		fi
+	done
+}
+
+get_lsblk_value() {
+	local key=$1
+	local record=$2
+	local pattern="(^|[[:space:]])${key}=\"([^\"]*)\""
+	if [[ "$record" =~ $pattern ]]; then
+		printf '%s' "${BASH_REMATCH[2]}"
+	fi
+}
+
+list_partitions() {
+	local record name type label mountpoint fstype index=0
+	PARTITION_DEVICES=()
+	PARTITION_MOUNTS=()
+	PARTITION_LABELS=()
+
+	while IFS= read -r record; do
+		name=$(get_lsblk_value NAME "$record")
+		type=$(get_lsblk_value TYPE "$record")
+		label=$(get_lsblk_value LABEL "$record")
+		mountpoint=$(get_lsblk_value MOUNTPOINT "$record")
+		fstype=$(get_lsblk_value FSTYPE "$record")
+		[[ "$type" == "part" && -n "$mountpoint" ]] || continue
+		((index += 1))
+		printf '  %d) %-24s label: %-20s mounted at: %s (%s)\n' \
+			"$index" "$name" "${label:-<no label>}" "$mountpoint" "${fstype:-unknown}"
+		PARTITION_DEVICES[index]="/dev/$name"
+		PARTITION_MOUNTS[index]="$mountpoint"
+		PARTITION_LABELS[index]="${label:-<no label>}"
+	done < <(lsblk -P -n -o NAME,TYPE,LABEL,MOUNTPOINT,FSTYPE)
+}
+
+choose_host_partition() {
+	local selection index
+	while true; do
+		echo "Mounted partitions:"
+		list_partitions
+		if [[ "${#PARTITION_DEVICES[@]}" -eq 0 ]]; then
+			echo "No mounted partitions with labels or mount points were found." >&2
+			exit 1
+		fi
+		read -r -p "Select a partition label or number (q to quit): " selection
+		[[ "$selection" == "q" ]] && exit 0
+		if [[ "$selection" =~ ^[0-9]+$ && -n "${PARTITION_DEVICES[selection]:-}" ]]; then
+			SOURCE_ROOT=${PARTITION_MOUNTS[selection]}
+			printf 'Selected %s (%s)\n\n' "${PARTITION_DEVICES[selection]}" "${PARTITION_LABELS[selection]}"
+			return 0
+		fi
+		for index in "${!PARTITION_LABELS[@]}"; do
+			if [[ "$selection" == "${PARTITION_LABELS[index]}" && "$selection" != "<no label>" ]]; then
+				SOURCE_ROOT=${PARTITION_MOUNTS[index]}
+				printf 'Selected %s (%s)\n\n' "${PARTITION_DEVICES[index]}" "${PARTITION_LABELS[index]}"
+				return 0
+			fi
+		done
+		echo "Invalid selection."
+	done
+}
+
+choose_image_file() {
+	local current_dir="$SOURCE_ROOT" selection entry index
+	local -a entries
+	while true; do
+		echo "Browsing: $current_dir"
+		entries=()
+		while IFS= read -r -d '' entry; do entries+=("$entry"); done < <(
+			find "$current_dir" -mindepth 1 -maxdepth 1 -printf '%p\0' 2>/dev/null | sort -z
+		)
+		printf '  0) ..\n'
+		for index in "${!entries[@]}"; do
+			if [[ -d "${entries[index]}" ]]; then
+				printf '  %d) %s/\n' "$((index + 1))" "$(basename "${entries[index]}")"
+			else
+				printf '  %d) %s\n' "$((index + 1))" "$(basename "${entries[index]}")"
+			fi
+		done
+		read -r -p "Select a directory or image file (q to quit): " selection
+		[[ "$selection" == "q" ]] && exit 0
+		if [[ "$selection" == "0" ]]; then
+			[[ "$current_dir" != "$SOURCE_ROOT" ]] && current_dir=$(dirname "$current_dir")
+		elif [[ "$selection" =~ ^[0-9]+$ ]] && ((selection >= 1 && selection <= ${#entries[@]})); then
+			entry=${entries[selection - 1]}
+			if [[ -d "$entry" ]]; then
+				current_dir=$entry
+			elif [[ "$entry" =~ \.(img|raw|iso|qcow2|vdi|vmdk|vhdx)$ ]]; then
+				IMAGE_FILE=$entry
+				return 0
+			else
+				echo "That file does not have a supported disk-image extension."
+			fi
+		else
+			echo "Invalid selection."
+		fi
+	done
+}
+
+format_image_drive() {
+	local record name type partition_device=""
+	require_command parted
+	require_command mkfs.ext4
+	require_command partprobe
+
+	echo "The entire virtual drive will be partitioned and formatted as ext4."
+	if ! confirm "This will destroy any data on the virtual drive. Continue?"; then
+		echo "No filesystem was created. Exiting without further changes."
+		exit 0
+	fi
+
+	if ! sudo parted --script "$NBD_DEVICE" mklabel gpt mkpart primary ext4 0% 100%; then
+		echo "Could not create a partition. Exiting." >&2
+		exit 1
+	fi
+	if ! sudo partprobe "$NBD_DEVICE"; then
+		echo "Could not reload the partition table. Exiting." >&2
+		exit 1
+	fi
+	while IFS= read -r record; do
+		name=$(get_lsblk_value NAME "$record")
+		type=$(get_lsblk_value TYPE "$record")
+		if [[ "$type" == "part" ]]; then
+			partition_device="/dev/$name"
+			break
+		fi
+	done < <(lsblk -P -n -o NAME,TYPE "$NBD_DEVICE")
+
+	if [[ -z "$partition_device" ]]; then
+		echo "The new partition could not be found. Exiting." >&2
+		exit 1
+	fi
+	if ! sudo mkfs.ext4 -F "$partition_device"; then
+		echo "Could not format the new partition. Exiting." >&2
+		exit 1
+	fi
+	IMAGE_DEVICE=$partition_device
+}
+
+choose_image_filesystem() {
+	local record name type filesystem label size selection selection_index index=0
+	local -a devices filesystems labels
+
+	echo "Filesystems found on the virtual drive:"
+	while IFS= read -r record; do
+		name=$(get_lsblk_value NAME "$record")
+		type=$(get_lsblk_value TYPE "$record")
+		filesystem=$(get_lsblk_value FSTYPE "$record")
+		label=$(get_lsblk_value LABEL "$record")
+		size=$(get_lsblk_value SIZE "$record")
+		[[ -n "$filesystem" && ( "$type" == "disk" || "$type" == "part" ) ]] || continue
+		((index += 1))
+		printf '  %d) /dev/%s filesystem: %-8s label: %-20s size: %s\n' \
+			"$index" "$name" "$filesystem" "${label:-<no label>}" "${size:-unknown}"
+		devices[index]="/dev/$name"
+		filesystems[index]="$filesystem"
+		labels[index]="${label:-<no label>}"
+	done < <(lsblk -P -n -o NAME,TYPE,FSTYPE,LABEL,SIZE,MOUNTPOINT "$NBD_DEVICE")
+
+	if [[ "$index" -eq 0 ]]; then
+		if confirm "No filesystem was found. Create one partition using the whole drive and format it as ext4?"; then
+			format_image_drive
+			return 0
+		fi
+		echo "No filesystem was created. Exiting without further changes."
+		exit 0
+	fi
+
+	while true; do
+		read -r -p "Select a filesystem number or label: " selection
+		for selection_index in "${!labels[@]}"; do
+			if [[ "$selection" =~ ^[0-9]+$ && "$selection_index" -ne "$((selection - 1))" ]]; then
+				continue
+			fi
+			if [[ "$selection" != "${labels[selection_index]}" && ! ( "$selection" =~ ^[0-9]+$ ) ]]; then
+				continue
+			fi
+			IMAGE_DEVICE=${devices[selection_index]}
+			if [[ "${filesystems[selection_index]}" != "ext4" ]]; then
+				echo "Warning: ${filesystems[selection_index]} is not ext4."
+				if ! confirm "Continue mounting this non-ext4 filesystem?"; then
+					break
+				fi
+			fi
+			printf 'Selected %s (%s, %s)\n' "$IMAGE_DEVICE" "${filesystems[selection_index]}" "${labels[selection_index]}"
+			return 0
+		done
+		echo "Invalid selection."
+	done
+}
+
+probe_iso_filesystem() {
+	local filesystem
+	PROBE_MOUNT=$(mktemp -d /tmp/uboontup-probe.XXXXXX)
+	if ! sudo mount -o loop,ro "$IMAGE_FILE" "$PROBE_MOUNT"; then
+		echo "The selected image could not be temporarily mounted for inspection." >&2
+		exit 1
+	fi
+
+	filesystem=$(findmnt -no FSTYPE -T "$PROBE_MOUNT" 2>/dev/null || true)
+	if [[ -z "$filesystem" ]]; then
+		echo "No filesystem was found in the selected image." >&2
+		exit 1
+	fi
+	echo "Filesystem found in selected image: $filesystem"
+	if [[ "$filesystem" != "ext4" ]]; then
+		echo "Warning: $filesystem is not ext4."
+		if ! confirm "Continue mounting this non-ext4 filesystem?"; then
+			echo "Exiting without mounting the virtual drive."
+			exit 0
+		fi
+	fi
+	IMAGE_FILESYSTEM=$filesystem
+	sudo umount "$PROBE_MOUNT"
+}
+
+prepare_image() {
+	local extension=${IMAGE_FILE##*.}
+	if [[ "${extension,,}" == "iso" ]]; then
+		require_command findmnt
+		probe_iso_filesystem
+		return 0
+	fi
+
+	require_command qemu-nbd
+	NBD_DEVICE=$(sudo qemu-nbd --find 2>/dev/null || true)
+	[[ -n "$NBD_DEVICE" ]] || { echo "No free NBD device was found." >&2; exit 1; }
+	if ! sudo qemu-nbd --connect="$NBD_DEVICE" "$IMAGE_FILE"; then
+		echo "The selected image could not be temporarily attached for inspection." >&2
+		exit 1
+	fi
+	choose_image_filesystem
+}
+
+mount_selected_image() {
+	local extension=${IMAGE_FILE##*.}
+	if [[ -z "$IMAGE_MOUNT" ]]; then
+		IMAGE_MOUNT=$(mktemp -d /tmp/uboontup-image.XXXXXX)
+		CREATED_MOUNT_POINT=true
+	fi
+	if [[ "$extension" == "iso" ]]; then
+		sudo mount -o loop,ro "$IMAGE_FILE" "$IMAGE_MOUNT"
+	else
+		sudo mount -o ro "$IMAGE_DEVICE" "$IMAGE_MOUNT"
+	fi
+	echo "Mounted image at: $IMAGE_MOUNT"
+}
+
+print_documentation
+if ! confirm "This operation will make changes to the system. Continue?"; then
+	echo "No changes were made."
+	exit 0
+fi
+
+require_command lsblk
+require_command find
+require_command mountpoint
+require_command sudo
+choose_host_partition
+choose_image_file
+echo "Selected image: $IMAGE_FILE"
+if [[ "${IMAGE_FILE,,}" == *.vhdx ]]; then
+	if ! check_vhdx_support; then
+		exit 1
+	fi
+fi
+
+prepare_image
+
+if ! confirm "Do you want to mount the virtual drive?"; then
+	echo "The system will exit without mounting the virtual drive."
+	exit 0
+fi
+
+if confirm "Do you want to choose a mount point?"; then
+	choose_mount_point
+else
+	echo "A temporary mount point will be created."
+fi
+
+mount_selected_image
+echo "The image is mounted at $IMAGE_MOUNT."
+if confirm "Do you want to keep the virtual drive mounted after this script exits?"; then
+	KEEP_MOUNT=true
+	echo "The virtual drive will remain mounted at $IMAGE_MOUNT."
+else
+	echo "The virtual drive will be unmounted when the script exits."
+fi

@@ -62,7 +62,7 @@ fi
 # Install Docker Engine
 sudo apt update
 (( EXIT_CODE+=$? ))
-sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin libguestfs-tools
 (( EXIT_CODE+=$? ))
 if [[ $EXIT_CODE -ne 0 ]]; then
   echo -e "There was an \033[1;31mERROR\033[0m installing Docker. Please check the output above for details."

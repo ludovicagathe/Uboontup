@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+
+set -e
+
+ERROR_DESC=""
+SCRIPT_COMPLETED=1
+finish() {
+	local exit_code=$?
+    if [[ $SCRIPT_COMPLETED -eq 1 ]]; then
+        echo -e "\nScript was interrupted." >&2
+    fi
+    trap - ERR EXIT INT TERM
+	exit "$exit_code"
+}
+trap finish ERR EXIT INT TERM
+
+# Global variables
+VIRT_DISK_FILE="" # Virtual disk file path
+EXT4_PART_FOUND="" # Flag to indicate if an ext4 partition was found
+SOURCE_ROOT="" # Root directory of the selected host partition
+
+print_documentation() {
+	cat <<'DOCUMENTATION'
+This script locates and scans a virtual hard-drive (.vhdx format) image.
+
+1. It lists mounted partitions and lets you select one by filesystem label.
+2. It gives you a text tree browser for that partition so you can choose a .vhdx image file
+
+The script needs sudo to mount partitions, create temporary mount points, and
+possibly attach an image. It changes the system while it is running. Only
+continue if you understand and trust the image you selected.
+DOCUMENTATION
+	printf '\n'
+}
+
+confirm() {
+	local answer
+	while true; do
+		read -r -p "$1 (y/n): " answer
+		case "$answer" in
+			[Yy]) return 0 ;;
+			[Nn]) return 1 ;;
+			*) echo "Please answer y or n." ;;
+		esac
+	done
+}
+
+require_command() {
+	if ! command -v "$1" >/dev/null 2>&1; then
+		ERROR_DESC="Required command '$1' was not found."
+		exit 1
+	fi
+}
+
+get_lsblk_value() {
+	local key=$1
+	local record=$2
+	local pattern="(^|[[:space:]])${key}=\"([^\"]*)\""
+	if [[ "$record" =~ $pattern ]]; then
+		printf '%s' "${BASH_REMATCH[2]}"
+	fi
+}
+
+list_partitions() {
+	local record name type label mountpoint fstype index=0
+	PARTITION_MOUNTS=()
+	PARTITION_LABELS=()
+
+	while IFS= read -r record; do
+		name=$(get_lsblk_value NAME "$record")
+		type=$(get_lsblk_value TYPE "$record")
+		label=$(get_lsblk_value LABEL "$record")
+		mountpoint=$(get_lsblk_value MOUNTPOINT "$record")
+		fstype=$(get_lsblk_value FSTYPE "$record")
+		[[ "$type" == "part" && -n "$mountpoint" ]] || continue
+		(( index += 1 ))
+		printf '  %d) %-24s label: %-20s mounted at: %s (%s)\n' \
+			"$index" "$name" "${label:-<no label>}" "$mountpoint" "${fstype:-unknown}"
+		PARTITION_MOUNTS[index]="$mountpoint"
+		PARTITION_LABELS[index]="${label:-<no label>}"
+	done < <(lsblk -P -n -o NAME,TYPE,LABEL,MOUNTPOINT,FSTYPE)
+}
+
+choose_host_partition() {
+	local selection index
+	while true; do
+		echo "Mounted host partitions:"
+		list_partitions
+		if [[ "${#PARTITION_MOUNTS[@]}" -eq 0 ]]; then
+			echo "No mounted host partitions were found." >&2
+			exit 1
+		fi
+		read -r -p "Select a partition label or number (q to quit): " selection
+		[[ "$selection" == q ]] && exit 0
+		if [[ "$selection" =~ ^[0-9]+$ && -n "${PARTITION_MOUNTS[selection]:-}" ]]; then
+			SOURCE_ROOT=${PARTITION_MOUNTS[selection]}
+			printf 'Selected host partition: %s (%s)\n\n' "$SOURCE_ROOT" "${PARTITION_LABELS[selection]}"
+			return 0
+		fi
+		for index in "${!PARTITION_LABELS[@]}"; do
+			if [[ "$selection" == "${PARTITION_LABELS[index]}" && "$selection" != '<no label>' ]]; then
+				SOURCE_ROOT=${PARTITION_MOUNTS[index]}
+				printf 'Selected host partition: %s (%s)\n\n' "$SOURCE_ROOT" "${PARTITION_LABELS[index]}"
+				return 0
+			fi
+		done
+		echo "Invalid selection."
+	done
+}
+
+choose_image_file() {
+	local current_dir="$SOURCE_ROOT" selection entry index
+	local -a entries
+	while true; do
+		echo "Browsing: $current_dir"
+		entries=()
+		while IFS= read -r -d '' entry; do entries+=("$entry"); done < <(
+			find "$current_dir" -mindepth 1 -maxdepth 1 -printf '%p\0' 2>/dev/null | sort -z
+		)
+		printf '  0) ..\n'
+		for index in "${!entries[@]}"; do
+			if [[ -d "${entries[index]}" ]]; then
+				printf '  %d) %s/\n' "$((index + 1))" "$(basename "${entries[index]}")"
+			else
+				printf '  %d) %s\n' "$((index + 1))" "$(basename "${entries[index]}")"
+			fi
+		done
+		read -r -p "Select a directory or VHDX file (q to quit): " selection
+		[[ "$selection" == q ]] && exit 0
+		if [[ "$selection" == 0 ]]; then
+			[[ "$current_dir" != "$SOURCE_ROOT" ]] && current_dir=$(dirname "$current_dir")
+		elif [[ "$selection" =~ ^[0-9]+$ ]] && ((selection >= 1 && selection <= ${#entries[@]})); then
+			entry=${entries[selection - 1]}
+			if [[ -d "$entry" ]]; then
+				current_dir=$entry
+			elif [[ "${entry,,}" == *.vhdx ]]; then
+				VIRT_DISK_FILE=$entry
+				return 0
+			else
+				echo "That file is not a VHDX image."
+			fi
+		else
+			echo "Invalid selection."
+		fi
+	done
+}
+
+scan_for_ext4() {
+    if [[ -z "$VIRT_DISK_FILE" || ! -f "$VIRT_DISK_FILE" ]]; then
+        echo "File '$VIRT_DISK_FILE' does not exist."
+        SCRIPT_COMPLETED=0
+        exit 1
+    else
+        EXT4_PART_FOUND=$(sudo virt-filesystems -a "$VIRT_DISK_FILE" --filesystems --long | grep ext4 || true)
+        if [[ -z "$EXT4_PART_FOUND" ]]; then
+            echo "No ext4 partition found in '$VIRT_DISK_FILE'."
+            SCRIPT_COMPLETED=0
+            exit 1
+        else
+            echo "Found ext4 partition in '$VIRT_DISK_FILE'" >&2
+        fi
+    fi
+}
+
+print_documentation >&2
+if ! confirm "This operation will make changes to the system. Continue?"; then
+	echo "No probing was made."
+    SCRIPT_COMPLETED=0
+	exit 0
+fi
+
+require_command "virt-filesystems"
+require_command "sudo"
+
+if [[ -n "$1" ]]; then
+    VIRT_DISK_FILE="$1"
+    scan_for_ext4
+else
+    choose_host_partition
+    choose_image_file
+    scan_for_ext4
+fi
+
+SCRIPT_COMPLETED=0

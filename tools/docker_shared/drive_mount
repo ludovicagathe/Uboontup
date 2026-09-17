@@ -1,0 +1,312 @@
+#!/usr/bin/env bash
+
+set -u
+
+SOURCE_ROOT=""
+IMAGE_FILE=""
+IMAGE_DEVICE=""
+IMAGE_MOUNT=""
+CREATED_MOUNT_POINT=false
+KEEP_MOUNT=false
+
+print_documentation() {
+	cat <<'DOCUMENTATION'
+This script locates and mounts an ext4 filesystem inside a VHDX image.
+
+1. It lists mounted host partitions and lets you select one by number or
+	 filesystem label.
+2. It gives you a text tree browser for that partition so you can choose a
+	 .vhdx image.
+3. It uses virt-filesystems to inspect the image and lists the ext4
+	 filesystems it finds.
+4. It mounts the selected ext4 filesystem read-only with guestmount.
+5. Temporary guest mounts are removed when the script exits unless you choose
+	 to keep the mount active.
+
+The script needs sudo to create a mount directory under /mnt. The selected
+image is never modified, but its contents are exposed through a read-only
+mount. Only continue if you understand and trust the image you selected.
+DOCUMENTATION
+	printf '\n'
+}
+
+finish() {
+	local exit_code=$?
+
+	if [[ "$KEEP_MOUNT" != true && -n "$IMAGE_MOUNT" ]] && mountpoint -q "$IMAGE_MOUNT" 2>/dev/null; then
+		guestunmount "$IMAGE_MOUNT" >/dev/null 2>&1 || true
+	fi
+	if [[ "$CREATED_MOUNT_POINT" == true && -n "$IMAGE_MOUNT" ]]; then
+		rmdir "$IMAGE_MOUNT" >/dev/null 2>&1 || sudo rmdir "$IMAGE_MOUNT" >/dev/null 2>&1 || true
+	fi
+	exit "$exit_code"
+}
+trap finish EXIT INT TERM
+
+confirm() {
+	local answer
+	while true; do
+		read -r -p "$1 (y/n): " answer
+		case "$answer" in
+			[Yy]) return 0 ;;
+			[Nn]) return 1 ;;
+			*) echo "Please answer y or n." ;;
+		esac
+	done
+}
+
+require_command() {
+	if ! command -v "$1" >/dev/null 2>&1; then
+		echo "Error: required command '$1' was not found." >&2
+		exit 1
+	fi
+}
+
+directory_is_available() {
+	local directory=$1
+	[[ -d "$directory" && -w "$directory" ]] || return 1
+	mountpoint -q "$directory" && return 1
+	[[ -z "$(find "$directory" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]
+}
+
+choose_mount_point() {
+	local selection directory directory_name
+	local -a mount_directories
+
+	while true; do
+		echo "Empty, writable directories under /mnt:"
+		mount_directories=()
+		while IFS= read -r -d '' directory; do
+			mount_directories+=("$directory")
+		done < <(find /mnt -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+
+		if [[ "${#mount_directories[@]}" -eq 0 ]]; then
+			echo "  No suitable directories found."
+		else
+			for selection in "${!mount_directories[@]}"; do
+				directory=${mount_directories[selection]}
+				if directory_is_available "$directory"; then
+					echo "  $((selection + 1))) $directory (available)"
+				else
+					echo "  $((selection + 1))) $directory (not available)"
+				fi
+			done
+		fi
+		echo "  n) Create a new writable mount directory"
+		echo "  q) Exit without mounting"
+		read -r -p "Select a directory or choose n: " selection
+
+		if [[ "$selection" == q ]]; then
+			exit 0
+		elif [[ "$selection" == n ]]; then
+			read -r -p "Enter the new directory name under /mnt: " directory_name
+			if [[ -z "$directory_name" || "$directory_name" == */* || "$directory_name" == . || "$directory_name" == .. ]]; then
+				echo "Enter a simple directory name without '/'."
+				continue
+			fi
+			directory="/mnt/$directory_name"
+			if [[ -e "$directory" ]]; then
+				echo "$directory already exists."
+				continue
+			fi
+			if ! sudo mkdir "$directory" || ! sudo chown "$(id -u):$(id -g)" "$directory"; then
+				echo "Could not create a writable mount directory."
+				sudo rmdir "$directory" 2>/dev/null || true
+				continue
+			fi
+			IMAGE_MOUNT=$directory
+			CREATED_MOUNT_POINT=true
+			return 0
+		elif [[ "$selection" =~ ^[0-9]+$ && -n "${mount_directories[selection - 1]:-}" ]]; then
+			directory=${mount_directories[selection - 1]}
+			if directory_is_available "$directory"; then
+				IMAGE_MOUNT=$directory
+				return 0
+			fi
+			echo "$directory is not empty, writable, or available."
+		else
+			echo "Invalid selection."
+		fi
+	done
+}
+
+get_lsblk_value() {
+	local key=$1
+	local record=$2
+	local pattern="(^|[[:space:]])${key}=\"([^\"]*)\""
+	if [[ "$record" =~ $pattern ]]; then
+		printf '%s' "${BASH_REMATCH[2]}"
+	fi
+}
+
+list_partitions() {
+	local record name type label mountpoint fstype index=0
+	PARTITION_MOUNTS=()
+	PARTITION_LABELS=()
+
+	while IFS= read -r record; do
+		name=$(get_lsblk_value NAME "$record")
+		type=$(get_lsblk_value TYPE "$record")
+		label=$(get_lsblk_value LABEL "$record")
+		mountpoint=$(get_lsblk_value MOUNTPOINT "$record")
+		fstype=$(get_lsblk_value FSTYPE "$record")
+		[[ "$type" == part && -n "$mountpoint" ]] || continue
+		((index += 1))
+		printf '  %d) %-24s label: %-20s mounted at: %s (%s)\n' \
+			"$index" "$name" "${label:-<no label>}" "$mountpoint" "${fstype:-unknown}"
+		PARTITION_MOUNTS[index]="$mountpoint"
+		PARTITION_LABELS[index]="${label:-<no label>}"
+	done < <(lsblk -P -n -o NAME,TYPE,LABEL,MOUNTPOINT,FSTYPE)
+}
+
+choose_host_partition() {
+	local selection index
+	while true; do
+		echo "Mounted host partitions:"
+		list_partitions
+		if [[ "${#PARTITION_MOUNTS[@]}" -eq 0 ]]; then
+			echo "No mounted host partitions were found." >&2
+			exit 1
+		fi
+		read -r -p "Select a partition label or number (q to quit): " selection
+		[[ "$selection" == q ]] && exit 0
+		if [[ "$selection" =~ ^[0-9]+$ && -n "${PARTITION_MOUNTS[selection]:-}" ]]; then
+			SOURCE_ROOT=${PARTITION_MOUNTS[selection]}
+			printf 'Selected host partition: %s (%s)\n\n' "$SOURCE_ROOT" "${PARTITION_LABELS[selection]}"
+			return 0
+		fi
+		for index in "${!PARTITION_LABELS[@]}"; do
+			if [[ "$selection" == "${PARTITION_LABELS[index]}" && "$selection" != '<no label>' ]]; then
+				SOURCE_ROOT=${PARTITION_MOUNTS[index]}
+				printf 'Selected host partition: %s (%s)\n\n' "$SOURCE_ROOT" "${PARTITION_LABELS[index]}"
+				return 0
+			fi
+		done
+		echo "Invalid selection."
+	done
+}
+
+choose_image_file() {
+	local current_dir="$SOURCE_ROOT" selection entry index
+	local -a entries
+	while true; do
+		echo "Browsing: $current_dir"
+		entries=()
+		while IFS= read -r -d '' entry; do entries+=("$entry"); done < <(
+			find "$current_dir" -mindepth 1 -maxdepth 1 -printf '%p\0' 2>/dev/null | sort -z
+		)
+		printf '  0) ..\n'
+		for index in "${!entries[@]}"; do
+			if [[ -d "${entries[index]}" ]]; then
+				printf '  %d) %s/\n' "$((index + 1))" "$(basename "${entries[index]}")"
+			else
+				printf '  %d) %s\n' "$((index + 1))" "$(basename "${entries[index]}")"
+			fi
+		done
+		read -r -p "Select a directory or VHDX file (q to quit): " selection
+		[[ "$selection" == q ]] && exit 0
+		if [[ "$selection" == 0 ]]; then
+			[[ "$current_dir" != "$SOURCE_ROOT" ]] && current_dir=$(dirname "$current_dir")
+		elif [[ "$selection" =~ ^[0-9]+$ ]] && ((selection >= 1 && selection <= ${#entries[@]})); then
+			entry=${entries[selection - 1]}
+			if [[ -d "$entry" ]]; then
+				current_dir=$entry
+			elif [[ "${entry,,}" == *.vhdx ]]; then
+				IMAGE_FILE=$entry
+				return 0
+			else
+				echo "That file is not a VHDX image."
+			fi
+		else
+			echo "Invalid selection."
+		fi
+	done
+}
+
+choose_ext4_filesystem() {
+	local record device type filesystem label size selection selection_index index=0 filesystem_records
+	local -a devices labels sizes
+
+	echo "Scanning VHDX filesystems with virt-filesystems..."
+	if ! filesystem_records=$(virt-filesystems --filesystems --long --no-title -a "$IMAGE_FILE"); then
+		echo "virt-filesystems could not inspect the selected VHDX." >&2
+		exit 1
+	fi
+	while IFS= read -r record; do
+		read -r device type filesystem label size _ <<< "$record"
+		[[ "$filesystem" == ext4 && "$device" == /dev/* ]] || continue
+		((index += 1))
+		printf '  %d) %s filesystem: %s label: %s size: %s\n' \
+			"$index" "$device" "$filesystem" "${label:--}" "${size:--}"
+		devices[index]=$device
+		labels[index]=${label:--}
+		sizes[index]=${size:--}
+	done <<< "$filesystem_records"
+
+	if [[ "$index" -eq 0 ]]; then
+		echo "No ext4 filesystem was found in the selected VHDX." >&2
+		exit 1
+	fi
+
+	while true; do
+		read -r -p "Select an ext4 filesystem number: " selection
+		if [[ "$selection" =~ ^[0-9]+$ && -n "${devices[selection]:-}" ]]; then
+			selection_index=$selection
+			IMAGE_DEVICE=${devices[selection_index]}
+			printf 'Selected %s (ext4, label: %s, size: %s)\n' \
+				"$IMAGE_DEVICE" "${labels[selection_index]}" "${sizes[selection_index]}"
+			return 0
+		fi
+		echo "Invalid selection."
+	done
+}
+
+mount_selected_filesystem() {
+	if [[ -z "$IMAGE_MOUNT" ]]; then
+		IMAGE_MOUNT=$(mktemp -d /tmp/uboontup-vhdx.XXXXXX)
+		CREATED_MOUNT_POINT=true
+	fi
+	if ! guestmount --ro -a "$IMAGE_FILE" -m "$IMAGE_DEVICE" "$IMAGE_MOUNT"; then
+		echo "The selected ext4 filesystem could not be mounted." >&2
+		exit 1
+	fi
+	echo "Mounted $IMAGE_DEVICE read-only at: $IMAGE_MOUNT"
+}
+
+print_documentation
+if ! confirm "This operation will inspect and mount a VHDX image. Continue?"; then
+	echo "No changes were made."
+	exit 0
+fi
+
+require_command find
+require_command lsblk
+require_command mountpoint
+require_command sudo
+require_command virt-filesystems
+require_command guestmount
+require_command guestunmount
+
+choose_host_partition
+choose_image_file
+echo "Selected VHDX image: $IMAGE_FILE"
+choose_ext4_filesystem
+
+if ! confirm "Mount the selected ext4 filesystem read-only?"; then
+	echo "The system will exit without mounting the VHDX."
+	exit 0
+fi
+
+if confirm "Do you want to choose a mount point?"; then
+	choose_mount_point
+else
+	echo "A temporary mount point will be created."
+fi
+
+mount_selected_filesystem
+if confirm "Keep the VHDX mounted after this script exits?"; then
+	KEEP_MOUNT=true
+	echo "The VHDX will remain mounted at $IMAGE_MOUNT."
+else
+	echo "The VHDX will be unmounted when the script exits."
+fi

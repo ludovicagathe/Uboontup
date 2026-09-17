@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+set -e
+
+ERROR_DESC=""
+SCRIPT_COMPLETED=1
+finish() {
+	local exit_code=$?
+    if [[ ${exit_code} -ne 0 ]]; then
+        echo "An error (${ERROR_DESC:-UNKNOWN ERROR}) occurred."
+    fi
+    if [[ $SCRIPT_COMPLETED -eq 1 ]]; then
+        echo -e "\nScript did not complete successfully."
+    fi
+    echo "Exiting"
+    trap - ERR EXIT INT TERM
+	
+	exit "$exit_code"
+}
+trap finish ERR EXIT INT TERM
+
+print_documentation() {
+	cat <<'DOCUMENTATION'
+Script description and basic documentation goes here.
+DOCUMENTATION
+	printf '\n'
+}
+
+confirm() {
+	local answer
+	while true; do
+		read -r -p "$1 (y/n): " answer
+		case "$answer" in
+			[Yy]) return 0 ;;
+			[Nn]) return 1 ;;
+			*) echo "Please answer y or n." ;;
+		esac
+	done
+}
+
+require_command() {
+	if ! command -v "$1" >/dev/null 2>&1; then
+		echo "Error: required command '$1' was not found." >&2
+		exit 1
+	fi
+}
+
+print_documentation
+if ! confirm "This operation will make changes to the system. Continue?"; then
+	echo "No changes were made."
+	SCRIPT_COMPLETED=0
+	exit 0
+fi
+
+SCRIPT_COMPLETED=0
