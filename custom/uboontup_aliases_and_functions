@@ -2,10 +2,10 @@
 # ALIASES
 alias ll="ls -alh"
 alias mkexec="chmod +x"
-alias aup="sudo apt update && sudo apt upgrade && sudo apt dist-upgrade && sudo snap refresh"
-alias aupr="sudo apt update && sudo apt upgrade && sudo apt dist-upgrade && sudo reboot"
+alias aup="sudo apt update && sudo apt upgrade && sudo apt dist-upgrade && sudo snap refresh && sudo apt autoremove && sudo apt autoclean"
+alias aupr="sudo apt update && sudo apt upgrade && sudo apt dist-upgrade && sudo apt autoremove && sudo apt autoclean && sudo reboot"
 alias catlog="tail -n 100 /var/log/syslog|grep"
-alias nbrc="nano -l ~/.bashrc"
+alias nbrc="nano -l ~/.bashrc && source ~/.bashrc"
 alias glog="git log --oneline -5"
 alias python="python3"
 alias pip="pip3"
@@ -50,5 +50,14 @@ gtag() { # git tag -a v1.4 -m "my version 1.4"
   fi
   
   git tag "$VERSION"
+  return 0
+}
+
+pvar(){ # Print the value of a variable
+  if [[ -z $1 ]]; then
+    echo "pvar: Verify and add variable name to print" >&2
+    return 1
+  fi
+  ( set -o posix ; set ) | grep -iF "${!1}";
   return 0
 }

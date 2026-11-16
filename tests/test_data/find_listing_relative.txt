@@ -1,0 +1,4 @@
+../sc_test
+../test.log
+../scratch.log
+../test

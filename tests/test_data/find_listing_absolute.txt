@@ -1,0 +1,4 @@
+/home/ludz/repos/uboontup/tests/sc_test
+/home/ludz/repos/uboontup/tests/test.log
+/home/ludz/repos/uboontup/tests/scratch.log
+/home/ludz/repos/uboontup/tests/test

@@ -2,7 +2,7 @@
 # Helper and library functions
 
 # Source messages.sh to access communication and output helper functions
-source ../lib/messages.sh
+source ./messages.sh
 
 # FUNCTIONS
 string_to_array() { # Split a string to an array. Using nameref to return an array to the first parameter. Compatible with bash 4.3+. An empty array should first be defined in the calling script. Usage: ARR=(); string_to_array ARR "\n" "$(cat sc_test)"; echo "${#ARR[@]}"

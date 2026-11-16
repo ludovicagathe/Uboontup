@@ -1,0 +1,14 @@
+total 60K
+drwxrwxr-x  5 ludz ludz 4.0K Nov  7 10:48 .
+drwxrwxr-x 13 ludz ludz 4.0K Sep 12 10:27 ..
+-rw-rw-r--  1 ludz ludz  357 Jun 11 08:24 example.tst
+-rw-rw-r--  1 ludz ludz   81 May 27 09:21 profiler
+-rw-rw-r--  1 ludz ludz  125 Jun 18 12:11 sc_test
+-rw-rw-r--  1 ludz ludz  125 May  6  2026 sc_test.bak
+-rwxrwxr-x  1 ludz ludz 9.9K Aug 12 15:01 scratch
+-rw-rw-r--  1 ludz ludz 2.1K Jun 14 08:07 scratch.log
+-rwxrwxr-x  1 ludz ludz 1.3K Jul 17 09:44 test
+-rw-rw-r--  1 ludz ludz  560 Jun 14 08:07 test.log
+drwxrwxr-x  2 ludz ludz 4.0K Nov  7 10:49 test_data
+drwxrwxr-x  8 ludz ludz 4.0K May  6  2026 test_home
+drwxrwxr-x  2 ludz ludz 4.0K May  6  2026 unit_tests
