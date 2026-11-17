@@ -13,6 +13,8 @@ alias sla="sudo ls -alh"
 alias scd="sudo cd"
 alias runroot="sudo -H -u root bash"
 alias cls="clear"
+alias tune-vm="sudo systemctl start tuned && sudo tuned-adm profile virtual-host && sudo tuned-adm active"
+alias tune-off="sudo tuned-adm off && sudo systemctl stop tuned && sudo tuned-adm active"
 alias ..="cd .."
 alias ...="cd ../.."
 
@@ -61,3 +63,11 @@ pvar(){ # Print the value of a variable
   ( set -o posix ; set ) | grep -iF "${!1}";
   return 0
 }
+
+# PATH inclusions
+PATH="$PATH:$HOME/.local/bin"
+
+# If not running in a terminal, launch tmux. Useful when using IDEs, to prevent TMUX from being launched when running in a terminal. This is a workaround for IDEs that do not support tmux, such as VSCode.
+if [[ -z "${TERM_PROGRAM}" ]]; then
+  [ -z "$TMUX" ] && [ -z "$TERM_PROGRAM" ] && tmux
+fi
