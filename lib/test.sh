@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 equals() {
   if [[ "$1" == "$2" ]]; then

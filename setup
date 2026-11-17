@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd && cd - &>/dev/null)"
 source "$SCRIPT_DIR/lib/functions.sh"
@@ -29,6 +29,7 @@ if [[ ! -z $(grep "uboontup_aliases_and_functions" "$HOME/.bashrc") ]]; then
   echo "uboontup_aliases_and_functions already exists in .bashrc"
 else
   echo "source $HOME/.config/uboontup/uboontup_aliases_and_functions" >> "$HOME/.bashrc"
+  source "$HOME/.bashrc"
   echo "Added uboontup_aliases_and_functions to .bashrc"
 fi
 
